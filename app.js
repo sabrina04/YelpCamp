@@ -2,14 +2,49 @@ var express 	= require("express"),
     app 		= express(),
     bodyParser 	= require("body-parser"),
     mongoose 	= require("mongoose"),
+    passport 	= require("passport"),
+    localStrategy = require("passport-local"),
+    methodOverride = require("method-override"),
     Campground 	= require("./models/campground"),
+    Comment 	= require("./models/comment"),
+    User		= require("./models/user"),
     seedDB      = require("./seed");
+
+//requring routes
+var commentRoutes    = require("./routes/comment"),
+    campgroundRoutes = require("./routes/campground"),
+    indexRoutes      = require("./routes/index")
 
 // connect to DB
 mongoose.connect("mongodb://localhost/yelp_camp");
 app.use(bodyParser.urlencoded({extended: true}));
+app.use(express.static(__dirname + "/public"));
+app.use(methodOverride("_method"));
 app.set("view engine", "ejs");
-seedDB();
+
+//seedDB();
+
+// PASSPORT CONFIGURATION
+app.use(require("express-session")({
+	secret: "random string",
+	resave: false,
+    saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new localStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+// middleware function
+app.use(function(request, response, next){
+   response.locals.currentUser = request.user;
+   next();
+});
+
+app.use("/", indexRoutes);
+app.use("/campground", campgroundRoutes);
+app.use("/campground/:id/comment", commentRoutes);
 
 // var campgrounds = [
 //         {name: "Salmon Creek", image: "https://farm9.staticflickr.com/8442/7962474612_bf2baf67c0.jpg"},
@@ -23,57 +58,7 @@ seedDB();
 //         {name: "Mountain Goat's Rest", image: "https://farm7.staticflickr.com/6057/6234565071_4d20668bbd.jpg"}
 // ];
 
-app.get("/", function(request, response){
-	response.render("landing");
-});
 
-//INDEX - show all campgrounds
-app.get("/campgrounds", function(request, response){
-	// get data from DB and render
-	Campground.find({}, function(err, allCampgrounds){
-		if(err){
-			console.log(err);
-		}
-		else{
-			response.render("index", {campgrounds: allCampgrounds});
-		}
-	});
-});
-
-//CREATE - add new campground to DB
-app.post("/campgrounds", function(request, response){
-	var name = request.body.name;
-	var image = request.body.image;
-	var desc = request.body.description;
-	var newCampground = {name: name, image: image, description: desc};
-	// insert newCampground into DB
-	Campground.create(newCampground, function(err, newdata){
-		if(err){
-			console.log(err);
-		}
-		else{
-			console.log("A new campground has been inserted\n" + newdata);
-		}
-	});
-	response.redirect("/campgrounds");
-});
-
-//NEW - show form to create new campground
-app.get("/campgrounds/new", function(request, response){
-	response.render("new");
-});
-
-// SHOW - shows more info about one campground
-app.get("/campgrounds/:id", function(request, response){
-	Campground.findById(request.params.id).populate("comments").exec(function(err, foundCampground){
-        if(err){
-            console.log(err);
-        } else {
-            //render show template with that campground
-            response.render("show", {campground: foundCampground});
-        }
-    });
-});
 
 app.listen(3000, "localhost", function(){
 	console.log("Server has been started at " + new Date().toUTCString());
